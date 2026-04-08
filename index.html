@@ -3,42 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Turbo Racer: Insane</title>
+    <title>Turbo-Racer</title>
     <style>
-        :root { --neon: #00ff41; }
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: white; }
+        body { margin: 0; background: #050505; overflow: hidden; font-family: 'Arial Black', sans-serif; }
         canvas { display: block; }
-        
-        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 10; }
+        #hud { position: absolute; top: 15px; width: 100%; display: flex; justify-content: space-around; color: #fff; font-size: 1.2rem; text-shadow: 2px 2px #f00; z-index: 10; pointer-events: none; }
+        .overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 20; color: #fff; }
         .hidden { display: none !important; }
-        
-        #hud { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; font-size: 1.2rem; z-index: 5; color: var(--neon); text-shadow: 0 0 5px var(--neon); }
-        
-        .btn-start { background: transparent; border: 2px solid var(--neon); color: var(--neon); padding: 15px 50px; font-size: 1.5rem; cursor: pointer; box-shadow: 0 0 15px var(--neon); text-transform: uppercase; }
-        
-        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
-        .touch-zone { width: 45%; height: 150px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,255,65,0.2); border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--neon); }
+        .btn-start { background: #f00; color: #fff; border: none; padding: 20px 50px; font-size: 1.5rem; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .controls { position: absolute; bottom: 10px; width: 100%; height: 30%; display: flex; z-index: 15; }
+        .touch-half { width: 50%; height: 100%; -webkit-tap-highlight-color: transparent; }
     </style>
 </head>
 <body>
 
     <div id="hud">
-        <span>LVL: <span id="lvl">1</span></span>
-        <span>PTS: <span id="score">0</span></span>
-        <span>MAX: <span id="best">0</span></span>
+        <span>SCORE: <span id="score">0</span></span>
+        <span>LEVEL: <span id="lvl">1</span></span>
     </div>
 
     <div id="menu" class="overlay">
-        <h1 style="color: var(--neon); font-size: 2.5rem;">MODO INSANO</h1>
-        <p>A velocidade aumenta SEM LIMITE.</p>
-        <button class="btn-start" onclick="startGame()">INICIAR</button>
+        <h1 style="color: #f00; font-size: 3rem;">CHAOS DRIVER</h1>
+        <p>A ESTRADA ESTÁ CHEIA. SOBREVIVE.</p>
+        <button class="btn-start" onclick="startGame()">ENTRAR NO CAOS</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
-    
+
     <div class="controls">
-        <div class="touch-zone" id="lBtn">◀</div>
-        <div class="touch-zone" id="rBtn">▶</div>
+        <div class="touch-half" id="lZone"></div>
+        <div class="touch-half" id="rZone"></div>
     </div>
 
     <script>
@@ -46,48 +40,44 @@
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score');
         const lvlEl = document.getElementById('lvl');
-        const bestEl = document.getElementById('best');
-        const menu = document.getElementById('menu');
-
+        
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let score = 0, level = 1, highscore = localStorage.getItem('insaneHighscore') || 0;
-        let gameActive = false, speed = 5, moveLeft = false, moveRight = false;
-        let player = { x: 0, y: canvas.height - 120, w: 45, h: 80 };
-        let obstacles = [];
-        bestEl.innerText = highscore;
+        let gameActive = false;
+        let score = 0;
+        let level = 1;
+        let speed = 6;
+        let player = { x: canvas.width/2 - 20, y: canvas.height - 150, w: 40, h: 75 };
+        let cars = [];
+        let moveLeft = false;
+        let moveRight = false;
 
-        // Controlos
-        const handleInput = (side, active) => { if(side === 'l') moveLeft = active; else moveRight = active; };
-        document.getElementById('lBtn').ontouchstart = () => handleInput('l', true);
-        document.getElementById('lBtn').ontouchend = () => handleInput('l', false);
-        document.getElementById('rBtn').ontouchstart = () => handleInput('r', true);
-        document.getElementById('rBtn').ontouchend = () => handleInput('r', false);
+        // Controlos simplificados: Toca na metade esquerda ou direita do ecrã
+        document.getElementById('lZone').ontouchstart = (e) => { e.preventDefault(); moveLeft = true; };
+        document.getElementById('lZone').ontouchend = () => moveLeft = false;
+        document.getElementById('rZone').ontouchstart = (e) => { e.preventDefault(); moveRight = true; };
+        document.getElementById('rZone').ontouchend = () => moveRight = false;
 
         function startGame() {
-            menu.classList.add('hidden');
-            score = 0; level = 1; speed = 6; obstacles = [];
-            player.x = canvas.width / 2 - 22;
+            document.getElementById('menu').classList.add('hidden');
+            score = 0; level = 1; speed = 6; cars = [];
             gameActive = true;
-            loop();
+            update();
         }
 
-        function spawnObstacles() {
-            const laneWidth = canvas.width / 4;
-            // Chance de spawnar 1 ou 2 carros ao mesmo tempo para fechar o caminho
-            const numToSpawn = Math.random() > 0.8 ? 2 : 1;
-            const usedLanes = [];
+        function spawnWave() {
+            const numLanes = 5; // Aumentei para 5 faixas para ser mais apertado
+            const laneWidth = canvas.width / numLanes;
+            const safeLane = Math.floor(Math.random() * numLanes); // Uma faixa fica livre
 
-            for(let i=0; i < numToSpawn; i++) {
-                let lane = Math.floor(Math.random() * 4);
-                if(!usedLanes.includes(lane)) {
-                    usedLanes.push(lane);
-                    obstacles.push({
-                        x: lane * laneWidth + (laneWidth/2 - 22),
+            for(let i = 0; i < numLanes; i++) {
+                if(i !== safeLane) {
+                    cars.push({
+                        x: i * laneWidth + (laneWidth/2 - 20),
                         y: -100,
-                        w: 45,
-                        h: 80,
+                        w: 40,
+                        h: 75,
                         s: speed + (Math.random() * 2)
                     });
                 }
@@ -98,76 +88,74 @@
             if(!gameActive) return;
 
             if(moveLeft && player.x > 5) player.x -= (speed + 2);
-            if(moveRight && player.x < canvas.width - 50) player.x += (speed + 2);
+            if(moveRight && player.x < canvas.width - 45) player.x += (speed + 2);
 
-            // Frequência de obstáculos aumenta com o nível
-            if(Math.random() < 0.03 + (level * 0.005)) spawnObstacles();
+            // Spawn de ondas de carros (carros por todo o lado)
+            if(cars.length === 0 || cars[cars.length-1].y > 250) {
+                spawnWave();
+            }
 
-            obstacles.forEach((obs, i) => {
-                obs.y += obs.s;
+            cars.forEach((car, i) => {
+                car.y += car.s;
 
-                // Colisão (Hitbox levemente menor que o desenho para ser justo)
-                if (player.x + 5 < obs.x + obs.w - 5 && player.x + player.w - 5 > obs.x + 5 &&
-                    player.y + 5 < obs.y + obs.h - 5 && player.y + player.h - 5 > obs.y + 5) {
-                    endGame();
+                // Colisão
+                if (player.x < car.x + car.w && player.x + player.w > car.x &&
+                    player.y < car.y + car.h && player.y + player.h > car.y) {
+                    gameOver();
                 }
 
-                if(obs.y > canvas.height) {
-                    obstacles.splice(i, 1);
+                // Remove e pontua
+                if(car.y > canvas.height) {
+                    cars.splice(i, 1);
                     score++;
                     scoreEl.innerText = score;
-                    if(score % 10 === 0) {
+                    if(score % 20 === 0) {
                         level++;
-                        speed += 1.2;
+                        speed += 1;
                         lvlEl.innerText = level;
-                        document.documentElement.style.setProperty('--neon', level % 2 === 0 ? '#ff003c' : '#00ff41');
                     }
                 }
             });
+
+            draw();
+            requestAnimationFrame(update);
         }
 
         function draw() {
-            ctx.fillStyle = '#050505';
+            // Asfalto
+            ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Estrada Insana
-            ctx.strokeStyle = 'rgba(0, 255, 65, 0.1)';
-            for(let i=1; i<4; i++) {
+            // Linhas de faixa
+            ctx.strokeStyle = '#333';
+            ctx.setLineDash([20, 40]);
+            for(let i=1; i<5; i++) {
                 ctx.beginPath();
-                ctx.moveTo(i * (canvas.width/4), 0);
-                ctx.lineTo(i * (canvas.width/4), canvas.height);
+                ctx.moveTo(i * (canvas.width/5), 0);
+                ctx.lineTo(i * (canvas.width/5), canvas.height);
                 ctx.stroke();
             }
 
-            // Jogador
+            // Jogador (Amarelo Neon)
             ctx.shadowBlur = 15;
-            ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--neon');
-            ctx.fillStyle = '#fff';
+            ctx.shadowColor = '#ffff00';
+            ctx.fillStyle = '#ffff00';
             ctx.fillRect(player.x, player.y, player.w, player.h);
 
-            // Inimigos
-            ctx.shadowColor = '#ff003c';
-            ctx.fillStyle = '#ff003c';
-            obstacles.forEach(obs => ctx.fillRect(obs.x, obs.y, obs.w, obs.h));
+            // Inimigos (Vermelho Escuro)
+            ctx.shadowColor = '#ff0000';
+            ctx.fillStyle = '#b30000';
+            cars.forEach(car => {
+                ctx.fillRect(car.x, car.y, car.w, car.h);
+            });
             ctx.shadowBlur = 0;
         }
 
-        function endGame() {
+        function gameOver() {
             gameActive = false;
-            if(score > highscore) {
-                highscore = score;
-                localStorage.setItem('insaneHighscore', highscore);
-                bestEl.innerText = highscore;
-            }
-            menu.classList.remove('hidden');
-            menu.querySelector('h1').innerText = "DESTRUÍDO!";
-        }
-
-        function loop() {
-            if(!gameActive) return;
-            update();
-            draw();
-            requestAnimationFrame(loop);
+            document.getElementById('menu').classList.remove('hidden');
+            document.querySelector('#menu h1').innerText = "COLISÃO!";
+            document.querySelector('#menu p').innerText = "Score Final: " + score;
         }
 
         draw();
