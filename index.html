@@ -3,184 +3,173 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Turbo Mobile Pro</title>
+    <title>Turbo Racer: Insane</title>
     <style>
-        :root { --accent: #00f2ff; }
-        body { margin: 0; background: #111; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
-        canvas { display: block; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+        :root { --neon: #00ff41; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: white; }
+        canvas { display: block; }
         
-        /* UI Layers */
-        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; text-align: center; padding: 20px; }
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.9); z-index: 10; }
         .hidden { display: none !important; }
         
-        #ui-top { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; font-weight: 900; font-size: 1.2rem; pointer-events: none; z-index: 5; }
+        #hud { position: absolute; top: 10px; width: 100%; display: flex; justify-content: space-around; font-size: 1.2rem; z-index: 5; color: var(--neon); text-shadow: 0 0 5px var(--neon); }
         
-        /* Buttons & Animations */
-        .btn-main { background: var(--accent); border: none; padding: 15px 40px; font-size: 1.5rem; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px var(--accent); transition: 0.3s; margin-top: 20px; }
-        .btn-main:active { transform: scale(0.9); }
+        .btn-start { background: transparent; border: 2px solid var(--neon); color: var(--neon); padding: 15px 50px; font-size: 1.5rem; cursor: pointer; box-shadow: 0 0 15px var(--neon); text-transform: uppercase; }
         
-        .controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; z-index: 5; }
-        .ctrl-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; -webkit-tap-highlight-color: transparent; }
-        
-        h1 { font-size: 3rem; margin: 0; text-transform: uppercase; letter-spacing: 5px; color: var(--accent); text-shadow: 0 0 15px var(--accent); }
-        .tuto-step { margin: 10px 0; font-size: 1.1rem; opacity: 0.9; }
+        .controls { position: absolute; bottom: 20px; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; }
+        .touch-zone { width: 45%; height: 150px; background: rgba(255,255,255,0.05); border: 1px solid rgba(0,255,65,0.2); border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--neon); }
     </style>
 </head>
 <body>
 
-    <div id="ui-top">
-        <div>PONTOS: <span id="score">0</span></div>
-        <div>RECORD: <span id="best">0</span></div>
+    <div id="hud">
+        <span>LVL: <span id="lvl">1</span></span>
+        <span>PTS: <span id="score">0</span></span>
+        <span>MAX: <span id="best">0</span></span>
     </div>
 
     <div id="menu" class="overlay">
-        <h1>TURBO RACER</h1>
-        <div id="tutorial">
-            <p class="tuto-step">🚀 O objetivo é sobreviver o máximo de tempo.</p>
-            <p class="tuto-step">↔️ Usa os botões para desviar dos outros carros.</p>
-            <p class="tuto-step">🔥 A velocidade aumenta a cada 5 pontos!</p>
-        </div>
-        <button class="btn-main" onclick="startGame()">JOGAR</button>
+        <h1 style="color: var(--neon); font-size: 2.5rem;">MODO INSANO</h1>
+        <p>A velocidade aumenta SEM LIMITE.</p>
+        <button class="btn-start" onclick="startGame()">INICIAR</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
     
     <div class="controls">
-        <div class="ctrl-btn" id="lBtn">◀</div>
-        <div class="ctrl-btn" id="rBtn">▶</div>
+        <div class="touch-zone" id="lBtn">◀</div>
+        <div class="touch-zone" id="rBtn">▶</div>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreEl = document.getElementById('score');
+        const lvlEl = document.getElementById('lvl');
         const bestEl = document.getElementById('best');
         const menu = document.getElementById('menu');
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let score = 0;
-        let highscore = localStorage.getItem('turboHighscore') || 0;
+        let score = 0, level = 1, highscore = localStorage.getItem('insaneHighscore') || 0;
+        let gameActive = false, speed = 5, moveLeft = false, moveRight = false;
+        let player = { x: 0, y: canvas.height - 120, w: 45, h: 80 };
+        let obstacles = [];
         bestEl.innerText = highscore;
 
-        let gameActive = false;
-        let speedMultiplier = 1;
-        let moveLeft = false;
-        let moveRight = false;
-
-        const player = { x: canvas.width/2 - 20, y: canvas.height - 150, w: 40, h: 70, color: '#00f2ff' };
-        let obstacles = [];
-
-        // Input Setup
-        const setLeft = (val) => moveLeft = val;
-        const setRight = (val) => moveRight = val;
-
-        document.getElementById('lBtn').ontouchstart = () => setLeft(true);
-        document.getElementById('lBtn').ontouchend = () => setLeft(false);
-        document.getElementById('rBtn').ontouchstart = () => setRight(true);
-        document.getElementById('rBtn').ontouchend = () => setRight(false);
+        // Controlos
+        const handleInput = (side, active) => { if(side === 'l') moveLeft = active; else moveRight = active; };
+        document.getElementById('lBtn').ontouchstart = () => handleInput('l', true);
+        document.getElementById('lBtn').ontouchend = () => handleInput('l', false);
+        document.getElementById('rBtn').ontouchstart = () => handleInput('r', true);
+        document.getElementById('rBtn').ontouchend = () => handleInput('r', false);
 
         function startGame() {
             menu.classList.add('hidden');
-            score = 0;
-            speedMultiplier = 1;
-            obstacles = [];
+            score = 0; level = 1; speed = 6; obstacles = [];
+            player.x = canvas.width / 2 - 22;
             gameActive = true;
-            scoreEl.innerText = score;
-            animate();
+            loop();
         }
 
-        function spawnObstacle() {
-            const lanes = [canvas.width*0.15, canvas.width*0.45, canvas.width*0.75];
-            const lane = lanes[Math.floor(Math.random() * 3)];
-            obstacles.push({
-                x: lane,
-                y: -100,
-                w: 40,
-                h: 70,
-                speed: (3 + Math.random() * 2) * speedMultiplier,
-                color: '#ff2d55'
-            });
-        }
+        function spawnObstacles() {
+            const laneWidth = canvas.width / 4;
+            // Chance de spawnar 1 ou 2 carros ao mesmo tempo para fechar o caminho
+            const numToSpawn = Math.random() > 0.8 ? 2 : 1;
+            const usedLanes = [];
 
-        function gameOver() {
-            gameActive = false;
-            if(score > highscore) {
-                highscore = score;
-                localStorage.setItem('turboHighscore', highscore);
-                bestEl.innerText = highscore;
+            for(let i=0; i < numToSpawn; i++) {
+                let lane = Math.floor(Math.random() * 4);
+                if(!usedLanes.includes(lane)) {
+                    usedLanes.push(lane);
+                    obstacles.push({
+                        x: lane * laneWidth + (laneWidth/2 - 22),
+                        y: -100,
+                        w: 45,
+                        h: 80,
+                        s: speed + (Math.random() * 2)
+                    });
+                }
             }
-            menu.classList.remove('hidden');
-            document.querySelector('h1').innerText = "GAME OVER";
-            document.getElementById('tutorial').innerHTML = `<p style="font-size:2rem">Score: ${score}</p>`;
         }
 
         function update() {
             if(!gameActive) return;
 
-            if(moveLeft && player.x > 20) player.x -= 7;
-            if(moveRight && player.x < canvas.width - 60) player.x += 7;
+            if(moveLeft && player.x > 5) player.x -= (speed + 2);
+            if(moveRight && player.x < canvas.width - 50) player.x += (speed + 2);
 
-            if(Math.random() < 0.02) spawnObstacle();
+            // Frequência de obstáculos aumenta com o nível
+            if(Math.random() < 0.03 + (level * 0.005)) spawnObstacles();
 
             obstacles.forEach((obs, i) => {
-                obs.y += obs.speed;
-                
-                // Colisão simples
-                if (player.x < obs.x + obs.w && player.x + player.w > obs.x &&
-                    player.y < obs.y + obs.h && player.y + player.h > obs.y) {
-                    gameOver();
+                obs.y += obs.s;
+
+                // Colisão (Hitbox levemente menor que o desenho para ser justo)
+                if (player.x + 5 < obs.x + obs.w - 5 && player.x + player.w - 5 > obs.x + 5 &&
+                    player.y + 5 < obs.y + obs.h - 5 && player.y + player.h - 5 > obs.y + 5) {
+                    endGame();
                 }
 
                 if(obs.y > canvas.height) {
                     obstacles.splice(i, 1);
                     score++;
                     scoreEl.innerText = score;
-                    if(score % 5 === 0) speedMultiplier += 0.1; // Dificuldade progressiva
+                    if(score % 10 === 0) {
+                        level++;
+                        speed += 1.2;
+                        lvlEl.innerText = level;
+                        document.documentElement.style.setProperty('--neon', level % 2 === 0 ? '#ff003c' : '#00ff41');
+                    }
                 }
             });
         }
 
         function draw() {
-            // Fundo Neon
-            ctx.fillStyle = '#111';
+            ctx.fillStyle = '#050505';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Linhas da estrada
-            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-            ctx.setLineDash([40, 20]);
-            ctx.lineWidth = 4;
-            [0.33, 0.66].forEach(p => {
+            // Estrada Insana
+            ctx.strokeStyle = 'rgba(0, 255, 65, 0.1)';
+            for(let i=1; i<4; i++) {
                 ctx.beginPath();
-                ctx.moveTo(canvas.width * p, 0);
-                ctx.lineTo(canvas.width * p, canvas.height);
+                ctx.moveTo(i * (canvas.width/4), 0);
+                ctx.lineTo(i * (canvas.width/4), canvas.height);
                 ctx.stroke();
-            });
+            }
 
-            // Jogador com brilho
+            // Jogador
             ctx.shadowBlur = 15;
-            ctx.shadowColor = player.color;
-            ctx.fillStyle = player.color;
+            ctx.shadowColor = getComputedStyle(document.documentElement).getPropertyValue('--neon');
+            ctx.fillStyle = '#fff';
             ctx.fillRect(player.x, player.y, player.w, player.h);
 
-            // Obstáculos
-            ctx.shadowColor = '#ff2d55';
-            obstacles.forEach(obs => {
-                ctx.fillStyle = obs.color;
-                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
-            });
+            // Inimigos
+            ctx.shadowColor = '#ff003c';
+            ctx.fillStyle = '#ff003c';
+            obstacles.forEach(obs => ctx.fillRect(obs.x, obs.y, obs.w, obs.h));
             ctx.shadowBlur = 0;
         }
 
-        function animate() {
+        function endGame() {
+            gameActive = false;
+            if(score > highscore) {
+                highscore = score;
+                localStorage.setItem('insaneHighscore', highscore);
+                bestEl.innerText = highscore;
+            }
+            menu.classList.remove('hidden');
+            menu.querySelector('h1').innerText = "DESTRUÍDO!";
+        }
+
+        function loop() {
             if(!gameActive) return;
             update();
             draw();
-            requestAnimationFrame(animate);
+            requestAnimationFrame(loop);
         }
 
-        // Draw inicial para não ficar ecrã preto
         draw();
     </script>
 </body>
