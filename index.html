@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turbo Mobile Pro</title>
+    <style>
+        :root { --accent: #00f2ff; }
+        body { margin: 0; background: #111; overflow: hidden; font-family: 'Segoe UI', sans-serif; color: white; }
+        canvas { display: block; filter: drop-shadow(0 0 10px rgba(0,0,0,0.5)); }
+        
+        /* UI Layers */
+        .overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.8); z-index: 10; text-align: center; padding: 20px; }
+        .hidden { display: none !important; }
+        
+        #ui-top { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; font-weight: 900; font-size: 1.2rem; pointer-events: none; z-index: 5; }
+        
+        /* Buttons & Animations */
+        .btn-main { background: var(--accent); border: none; padding: 15px 40px; font-size: 1.5rem; font-weight: bold; border-radius: 50px; cursor: pointer; box-shadow: 0 0 20px var(--accent); transition: 0.3s; margin-top: 20px; }
+        .btn-main:active { transform: scale(0.9); }
+        
+        .controls { position: absolute; bottom: 30px; width: 100%; display: flex; justify-content: space-between; padding: 0 30px; box-sizing: border-box; z-index: 5; }
+        .ctrl-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; -webkit-tap-highlight-color: transparent; }
+        
+        h1 { font-size: 3rem; margin: 0; text-transform: uppercase; letter-spacing: 5px; color: var(--accent); text-shadow: 0 0 15px var(--accent); }
+        .tuto-step { margin: 10px 0; font-size: 1.1rem; opacity: 0.9; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-top">
+        <div>PONTOS: <span id="score">0</span></div>
+        <div>RECORD: <span id="best">0</span></div>
+    </div>
+
+    <div id="menu" class="overlay">
+        <h1>TURBO RACER</h1>
+        <div id="tutorial">
+            <p class="tuto-step">🚀 O objetivo é sobreviver o máximo de tempo.</p>
+            <p class="tuto-step">↔️ Usa os botões para desviar dos outros carros.</p>
+            <p class="tuto-step">🔥 A velocidade aumenta a cada 5 pontos!</p>
+        </div>
+        <button class="btn-main" onclick="startGame()">JOGAR</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+    
+    <div class="controls">
+        <div class="ctrl-btn" id="lBtn">◀</div>
+        <div class="ctrl-btn" id="rBtn">▶</div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const bestEl = document.getElementById('best');
+        const menu = document.getElementById('menu');
+
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let score = 0;
+        let highscore = localStorage.getItem('turboHighscore') || 0;
+        bestEl.innerText = highscore;
+
+        let gameActive = false;
+        let speedMultiplier = 1;
+        let moveLeft = false;
+        let moveRight = false;
+
+        const player = { x: canvas.width/2 - 20, y: canvas.height - 150, w: 40, h: 70, color: '#00f2ff' };
+        let obstacles = [];
+
+        // Input Setup
+        const setLeft = (val) => moveLeft = val;
+        const setRight = (val) => moveRight = val;
+
+        document.getElementById('lBtn').ontouchstart = () => setLeft(true);
+        document.getElementById('lBtn').ontouchend = () => setLeft(false);
+        document.getElementById('rBtn').ontouchstart = () => setRight(true);
+        document.getElementById('rBtn').ontouchend = () => setRight(false);
+
+        function startGame() {
+            menu.classList.add('hidden');
+            score = 0;
+            speedMultiplier = 1;
+            obstacles = [];
+            gameActive = true;
+            scoreEl.innerText = score;
+            animate();
+        }
+
+        function spawnObstacle() {
+            const lanes = [canvas.width*0.15, canvas.width*0.45, canvas.width*0.75];
+            const lane = lanes[Math.floor(Math.random() * 3)];
+            obstacles.push({
+                x: lane,
+                y: -100,
+                w: 40,
+                h: 70,
+                speed: (3 + Math.random() * 2) * speedMultiplier,
+                color: '#ff2d55'
+            });
+        }
+
+        function gameOver() {
+            gameActive = false;
+            if(score > highscore) {
+                highscore = score;
+                localStorage.setItem('turboHighscore', highscore);
+                bestEl.innerText = highscore;
+            }
+            menu.classList.remove('hidden');
+            document.querySelector('h1').innerText = "GAME OVER";
+            document.getElementById('tutorial').innerHTML = `<p style="font-size:2rem">Score: ${score}</p>`;
+        }
+
+        function update() {
+            if(!gameActive) return;
+
+            if(moveLeft && player.x > 20) player.x -= 7;
+            if(moveRight && player.x < canvas.width - 60) player.x += 7;
+
+            if(Math.random() < 0.02) spawnObstacle();
+
+            obstacles.forEach((obs, i) => {
+                obs.y += obs.speed;
+                
+                // Colisão simples
+                if (player.x < obs.x + obs.w && player.x + player.w > obs.x &&
+                    player.y < obs.y + obs.h && player.y + player.h > obs.y) {
+                    gameOver();
+                }
+
+                if(obs.y > canvas.height) {
+                    obstacles.splice(i, 1);
+                    score++;
+                    scoreEl.innerText = score;
+                    if(score % 5 === 0) speedMultiplier += 0.1; // Dificuldade progressiva
+                }
+            });
+        }
+
+        function draw() {
+            // Fundo Neon
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Linhas da estrada
+            ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+            ctx.setLineDash([40, 20]);
+            ctx.lineWidth = 4;
+            [0.33, 0.66].forEach(p => {
+                ctx.beginPath();
+                ctx.moveTo(canvas.width * p, 0);
+                ctx.lineTo(canvas.width * p, canvas.height);
+                ctx.stroke();
+            });
+
+            // Jogador com brilho
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = player.color;
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.w, player.h);
+
+            // Obstáculos
+            ctx.shadowColor = '#ff2d55';
+            obstacles.forEach(obs => {
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            });
+            ctx.shadowBlur = 0;
+        }
+
+        function animate() {
+            if(!gameActive) return;
+            update();
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // Draw inicial para não ficar ecrã preto
+        draw();
+    </script>
+</body>
+</html>
